@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks, savgol_filter
 import cv2
 import numpy as np
-from scipy.signal import find_peaks
 
 # 1. Open the video file
 video = cv2.VideoCapture("worm_video.MOV")  # replace with your video file
@@ -16,8 +15,9 @@ previous_head = None
 frame_number = 0
 
 def get_end_points(contour):
-    """Find the two points on the worm's outline that are farthest apart."""
-    points = contour.reshape(-1, 2)
+    """Find the two points farthest apart, using only the outer hull for speed."""
+    hull = cv2.convexHull(contour)
+    points = hull.reshape(-1, 2)
 
     max_dist = 0
     end1, end2 = points[0], points[0]
@@ -31,10 +31,16 @@ def get_end_points(contour):
 
     return end1, end2
 
+def touches_edge(contour, frame_shape, margin=5):
+    """True if any part of the contour is near the frame's border."""
+    x, y, w, h = cv2.boundingRect(contour)
+    height, width = frame_shape[:2]
+    return (x <= margin or y <= margin or
+            x + w >= width - margin or y + h >= height - margin)
+
 # 3. Go through the video one frame at a time
 while True:
     success, frame = video.read()
-    if frame_number == 0: cv2.imwrite("sample_frame.png", frame)
     if not success:
         break  # no more frames — video is over
     frame = frame[3:1070, 463:1492]
@@ -45,10 +51,7 @@ while True:
 
     # Turn it into pure black/white so the worm stands out from the background
     thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, blockSize=51, C=5)
-    cv2.imshow("Threshold", thresh)
-    if frame_number == 0:
-                cv2.waitKey(0)
-    cv2.waitKey(1)
+  
     # Find the outline (contour) of the worm blob
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -56,18 +59,14 @@ while True:
 
     if possible_worms:
         worm = max(possible_worms, key=cv2.contourArea)
+
+        if touches_edge(worm, frame.shape):
+            print(f"Worm reached frame edge at frame {frame_number} — stopping data collection.")
+            break
         M = cv2.moments(worm)
         if M["m00"] != 0:
             center = np.array([M["m10"] / M["m00"], M["m01"] / M["m00"]]) 
             end1, end2 = get_end_points(worm)
-
-            debug_frame = frame.copy()
-            cv2.circle(debug_frame, tuple(end1.astype(int)), 8, (0, 0, 255), -1)   # red dot
-            cv2.circle(debug_frame, tuple(end2.astype(int)), 8, (255, 0, 0), -1)   # blue dot
-            cv2.imshow("Head/tail check", debug_frame)
-
-            if frame_number == 0:
-                cv2.waitKey(0)   # pauses on the first frame, press any key to continue
 
             # Determine which end is the head (closest to the previous head position)
             if previous_head is None:
@@ -82,8 +81,12 @@ while True:
 
             previous_head = head
 
-            # angle of the head relative to the worm's own center, instead of raw position on the plate
-            vector = head - center
+            # "neck" = average position of the outline points near the head
+            points = worm.reshape(-1, 2)
+            near_head = points[np.linalg.norm(points - head, axis=1) < 40]
+            neck = near_head.mean(axis=0)
+
+            vector = head - neck
             angle = np.arctan2(vector[1], vector[0])
             angles.append(angle)
             
@@ -91,11 +94,15 @@ while True:
 
 fps = video.get(cv2.CAP_PROP_FPS)
 video.release()
-cv2.destroyAllWindows()
 
  # 4. Clean up the angle signal
 angles = np.unwrap(np.array(angles))   # removes the fake jumps at +/- pi
-smoothed = savgol_filter(angles, window_length=15, polyorder=2)
+window = min(151, len(angles) - 1)
+if window % 2 == 0:
+    window -= 1
+trend = savgol_filter(angles, window_length=window, polyorder=2)   # slow turning of the whole worm
+swing = angles - trend                                          # what's left is the head swinging
+smoothed = savgol_filter(swing, window_length=15, polyorder=2)
 
 print("Frames in video:", frame_number)
 print("Frames where worm was found:", len(angles))
@@ -103,9 +110,10 @@ print("fps:", fps)
 
 # 5. Count peaks and troughs, ignoring tiny wiggles
 min_size = 0.5 * np.std(smoothed)
-peaks, _ = find_peaks(smoothed, prominence=min_size)
-troughs, _ = find_peaks(-smoothed, prominence=min_size)
-total_bends = len(peaks) + len(troughs)
+min_distance = 10  # minimum frames between separate bends
+peaks, _ = find_peaks(smoothed, prominence=min_size, distance=min_distance)
+troughs, _ = find_peaks(-smoothed, prominence=min_size, distance=min_distance)
+total_bends = (len(peaks) + len(troughs)) / 2
 
 # 6. Bends per minute
 video_length_seconds = len(angles) / fps
@@ -113,7 +121,7 @@ print("Total peaks + troughs:", total_bends)
 print("Bends per minute:", total_bends / (video_length_seconds / 60))
 
 # 7. Plot raw vs smoothed
-plt.plot(angles, alpha=0.4, label="raw")
+plt.plot(swing, alpha=0.4, label="raw")
 plt.plot(smoothed, label="smoothed")
 plt.plot(peaks, smoothed[peaks], "ro")
 plt.plot(troughs, smoothed[troughs], "go")
