@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 # 1. Open the video file
-video = cv2.VideoCapture("test3.MOV")  # replace with your video file
+video = cv2.VideoCapture("worm_video.MOV")  # replace with your video file
 
 # 2. This will store the worm head's angle to its own body in every frame
 angles = []
@@ -134,6 +134,7 @@ plt.plot(troughs, smoothed[troughs], "go")
 plt.xlabel("Frame")
 plt.ylabel("Head angle")
 plt.legend()
+plt.savefig("assets/bend_rate_plot.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 

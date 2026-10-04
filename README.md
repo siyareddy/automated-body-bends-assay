@@ -16,6 +16,12 @@ This project replaces manual counting with a consistent, code-based measurement,
 4. Measures how the head swings side to side over time.
 5. Counts full bends and reports a bends-per-minute value.
 
+## Example output
+
+![Bend-rate plot showing raw and smoothed head angle signal with detected peaks and troughs](assets/bend_rate_plot.png)
+
+This plot shows the extracted head-angle signal over time, with detected peaks (red) and troughs (green) marking individual bends. This example matched a manual by-eye count exactly (27 vs. 27).
+
 ## Setup
 
 ```bash
