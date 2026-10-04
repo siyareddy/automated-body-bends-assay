@@ -37,7 +37,19 @@ pip install opencv-python scipy
 
 ## Status
 
-Core pipeline works: detects the worm, tracks its head through reversals, and extracts a bend-rate signal. Tested on one video — automated count (24.5 bends) is close to, but not identical to, a manual by-eye count (~20 bends) over the same clip. Possible sources of the gap: subtle bends that are hard to catch by eye but visible in the extracted signal, or oversensitivity to small wiggles. Next: validate against more videos and more genotypes.
+Core pipeline works: detects the worm, tracks its head through reversals, handles worms entering/leaving the frame, and extracts a bend-rate signal.
+
+Validated against 3 videos, comparing automated counts to manual by-eye counts:
+
+| Video  | Automated count | Manual count |
+|--------|------------------|--------------|
+| Test 1 | 10               | 12           |
+| Test 2 | 27               | 27           |
+| Test 3 | 12               | 15           |
+
+Test 3 shows reduced accuracy due to a stretch of fast, jagged worm movement, which breaks the assumption of smooth frame-to-frame motion that the head-tracking and smoothing logic rely on. This is a known limitation of the current approach, not a bug — tracking is most reliable for continuous, non-erratic locomotion.
+
+Next: investigate whether a higher frame rate or more targeted smoothing improves accuracy during fast movement; test across different genotypes to see if bend-rate differences are detectable.
 
 ## Background
 

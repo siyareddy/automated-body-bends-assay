@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 # 1. Open the video file
-video = cv2.VideoCapture("worm_video.MOV")  # replace with your video file
+video = cv2.VideoCapture("test3.MOV")  # replace with your video file
 
 # 2. This will store the worm head's angle to its own body in every frame
 angles = []
@@ -61,8 +61,14 @@ while True:
         worm = max(possible_worms, key=cv2.contourArea)
 
         if touches_edge(worm, frame.shape):
-            print(f"Worm reached frame edge at frame {frame_number} — stopping data collection.")
-            break
+            if len(angles) == 0:
+                # worm hasn't fully entered frame yet — just skip this frame, don't stop
+                frame_number += 1
+                continue
+            else:
+                # worm was being tracked fine, now it's leaving — stop for real
+                print(f"Worm reached frame edge at frame {frame_number} — stopping data collection.")
+                break
         M = cv2.moments(worm)
         if M["m00"] != 0:
             center = np.array([M["m10"] / M["m00"], M["m01"] / M["m00"]]) 
@@ -109,11 +115,11 @@ print("Frames where worm was found:", len(angles))
 print("fps:", fps)
 
 # 5. Count peaks and troughs, ignoring tiny wiggles
-min_size = 0.5 * np.std(smoothed)
-min_distance = 10  # minimum frames between separate bends
+min_size = 0.8 * np.std(smoothed)
+min_distance = 20  # minimum frames between separate bends
 peaks, _ = find_peaks(smoothed, prominence=min_size, distance=min_distance)
 troughs, _ = find_peaks(-smoothed, prominence=min_size, distance=min_distance)
-total_bends = (len(peaks) + len(troughs)) / 2
+total_bends = (len(peaks) + len(troughs))
 
 # 6. Bends per minute
 video_length_seconds = len(angles) / fps
